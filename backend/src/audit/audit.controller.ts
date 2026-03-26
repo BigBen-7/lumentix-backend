@@ -41,6 +41,7 @@ export class AuditController {
     return await paginate(queryBuilder, paginationDto, 'audit');
   }
 
+
   @Get(':id')
   @ApiOperation({ summary: 'Get audit log by ID', description: 'Admin-only. Retrieves details for a specific log entry.' })
   @ApiResponse({ status: 200, description: 'Log found', type: AuditLog })

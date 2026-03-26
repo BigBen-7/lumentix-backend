@@ -135,7 +135,7 @@ export class PaymentsService {
           amount: event.ticketPrice,
           currency,
           memo: existing.id,
-          expiresAt: existing.expiresAt.toISOString(),
+          expiresAt: existing.expiresAt?.toISOString(),
         };
       } else {
         // Expired intent, mark as failed
@@ -171,7 +171,7 @@ export class PaymentsService {
     });
 
     this.logger.log(
-      `Payment intent created: paymentId=${saved.id} event=${eventId} user=${userId} expiresAt=${saved.expiresAt?.toISOString() ?? 'n/a'}`,
+      `Payment intent created: paymentId=${saved.id} event=${eventId} user=${userId} expiresAt=${saved.expiresAt?.toISOString() ?? 'N/A'}`,
     );
 
     return {
