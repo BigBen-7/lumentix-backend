@@ -469,7 +469,10 @@ impl LumentixContract {
         }
 
         // Deduct from escrow
-        storage::deduct_escrow(&env, ticket.event_id, event.ticket_price)?;
+        let fee_bps = storage::get_platform_fee_bps(&env);
+        let platform_fee = (event.ticket_price * fee_bps as i128) / 10000;
+        let escrow_amount = event.ticket_price - platform_fee;
+        storage::deduct_escrow(&env, ticket.event_id, escrow_amount)?;
 
         // Mark ticket as refunded
         ticket.refunded = true;
@@ -626,7 +629,7 @@ impl LumentixContract {
     /// Get all events created by a specific organizer with a specific status.
     /// Returns an empty vector if no events match.
     /// No auth required.
-    pub fn get_events_by_organizer_and_status(
+    pub fn get_events_by_org_and_status(
         env: Env,
         organizer: Address,
         status: EventStatus,
@@ -749,33 +752,7 @@ impl LumentixContract {
         tickets
     }
 
-    /// Get all refunded tickets for a specific event.
-    /// Useful for organizers to track refund activity and for auditing after event cancellation.
-    /// Returns an empty Vec if no refunded tickets exist for the event.
-    pub fn get_refunded_tickets_by_event(
-        env: Env,
-        event_id: u64,
-    ) -> Result<Vec<Ticket>, LumentixError> {
-        // Verify the event exists
-        let _ = storage::get_event(&env, event_id)?;
 
-        let mut refunded_tickets = Vec::new(&env);
-        let next_ticket_id = storage::get_next_ticket_id(&env);
-        let mut ticket_id: u64 = 1;
-
-        // Iterate through all tickets
-        while ticket_id < next_ticket_id {
-            if let Ok(ticket) = storage::get_ticket(&env, ticket_id) {
-                // Check if ticket belongs to this event and is refunded
-                if ticket.event_id == event_id && ticket.refunded {
-                    refunded_tickets.push_back(ticket);
-                }
-            }
-            ticket_id += 1;
-        }
-
-        Ok(refunded_tickets)
-    }
 
     /// Extend the TTL of an event. Only the organizer can call this.
     pub fn bump_event_ttl(env: Env, event_id: u64) -> Result<(), LumentixError> {
@@ -1090,6 +1067,44 @@ impl LumentixContract {
     /// No auth required - useful for frontends and deployment scripts.
     pub fn get_is_initialized(env: Env) -> bool {
         storage::is_initialized(&env)
+    }
+
+    /// Get total revenue for an organizer across all events.
+    /// Iterates through all event IDs from 1 to EVENT_CTR, calculates gross revenue, and sums it up.
+    /// Returns 0 if the organizer has no events or no sales. No auth required.
+    pub fn get_organizer_total_revenue(env: Env, organizer: Address) -> i128 {
+        let mut total_revenue: i128 = 0;
+        let next_event_id = storage::get_next_event_id(&env);
+        let mut event_id: u64 = 1;
+
+        while event_id < next_event_id {
+            if let Ok(event) = storage::get_event(&env, event_id) {
+                if event.organizer == organizer {
+                    total_revenue += event.tickets_sold as i128 * event.ticket_price;
+                }
+            }
+            event_id += 1;
+        }
+
+        total_revenue
+    }
+
+    /// Get total tickets sold across all events on the platform.
+    /// Iterates through all events from 1 to EVENT_CTR and sums up the tickets_sold field.
+    /// No auth required.
+    pub fn get_total_tickets_sold(env: Env) -> u64 {
+        let mut total_tickets: u64 = 0;
+        let next_event_id = storage::get_next_event_id(&env);
+        let mut event_id: u64 = 1;
+
+        while event_id < next_event_id {
+            if let Ok(event) = storage::get_event(&env, event_id) {
+                total_tickets += event.tickets_sold as u64;
+            }
+            event_id += 1;
+        }
+
+        total_tickets
     }
 
     /// Get the addresses of all checked-in (used ticket) attendees for an event.
